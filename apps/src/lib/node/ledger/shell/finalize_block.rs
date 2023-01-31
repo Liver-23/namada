@@ -526,6 +526,7 @@ mod test_finalize_block {
             let raw_tx = Tx::new(
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
+                shell.chain_id.clone(),
             );
             let wrapper = WrapperTx::new(
                 Fee {
@@ -540,7 +541,9 @@ mod test_finalize_block {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             );
-            let tx = wrapper.sign(&keypair).expect("Test failed");
+            let tx = wrapper
+                .sign(&keypair, shell.chain_id.clone())
+                .expect("Test failed");
             if i > 1 {
                 processed_txs.push(ProcessedTx {
                     tx: tx.to_bytes(),
@@ -599,6 +602,7 @@ mod test_finalize_block {
         let raw_tx = Tx::new(
             "wasm_code".as_bytes().to_owned(),
             Some(String::from("transaction data").as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -736,6 +740,7 @@ mod test_finalize_block {
                         .as_bytes()
                         .to_owned(),
                 ),
+                shell.chain_id.clone(),
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
@@ -773,6 +778,7 @@ mod test_finalize_block {
                         .as_bytes()
                         .to_owned(),
                 ),
+                shell.chain_id.clone(),
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
@@ -787,7 +793,9 @@ mod test_finalize_block {
                 #[cfg(not(feature = "mainnet"))]
                 None,
             );
-            let wrapper = wrapper_tx.sign(&keypair).expect("Test failed");
+            let wrapper = wrapper_tx
+                .sign(&keypair, shell.chain_id.clone())
+                .expect("Test failed");
             valid_txs.push(wrapper_tx);
             processed_txs.push(ProcessedTx {
                 tx: wrapper.to_bytes(),
@@ -859,6 +867,7 @@ mod test_finalize_block {
         let raw_tx = Tx::new(
             tx_code,
             Some("Encrypted transaction data".as_bytes().to_owned()),
+            shell.chain_id.clone(),
         );
         let wrapper_tx = WrapperTx::new(
             Fee {

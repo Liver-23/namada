@@ -491,7 +491,6 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_finalize_block {
-    use namada::types::storage::Epoch;
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
 
     use super::*;
@@ -527,6 +526,7 @@ mod test_finalize_block {
                 "wasm_code".as_bytes().to_owned(),
                 Some(format!("transaction data: {}", i).as_bytes().to_owned()),
                 shell.chain_id.clone(),
+                None,
             );
             let wrapper = WrapperTx::new(
                 Fee {
@@ -534,7 +534,6 @@ mod test_finalize_block {
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
-                Epoch(0),
                 0.into(),
                 raw_tx.clone(),
                 Default::default(),
@@ -542,7 +541,7 @@ mod test_finalize_block {
                 None,
             );
             let tx = wrapper
-                .sign(&keypair, shell.chain_id.clone())
+                .sign(&keypair, shell.chain_id.clone(), None)
                 .expect("Test failed");
             if i > 1 {
                 processed_txs.push(ProcessedTx {
@@ -603,6 +602,7 @@ mod test_finalize_block {
             "wasm_code".as_bytes().to_owned(),
             Some(String::from("transaction data").as_bytes().to_owned()),
             shell.chain_id.clone(),
+            None,
         );
         let wrapper = WrapperTx::new(
             Fee {
@@ -610,7 +610,6 @@ mod test_finalize_block {
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
-            Epoch(0),
             0.into(),
             raw_tx.clone(),
             Default::default(),
@@ -668,7 +667,6 @@ mod test_finalize_block {
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             pk: keypair.ref_to(),
-            epoch: Epoch(0),
             gas_limit: 0.into(),
             inner_tx,
             tx_hash: hash_tx(&tx),
@@ -741,6 +739,7 @@ mod test_finalize_block {
                         .to_owned(),
                 ),
                 shell.chain_id.clone(),
+                None,
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
@@ -748,7 +747,6 @@ mod test_finalize_block {
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
-                Epoch(0),
                 0.into(),
                 raw_tx.clone(),
                 Default::default(),
@@ -779,6 +777,7 @@ mod test_finalize_block {
                         .to_owned(),
                 ),
                 shell.chain_id.clone(),
+                None,
             );
             let wrapper_tx = WrapperTx::new(
                 Fee {
@@ -786,7 +785,6 @@ mod test_finalize_block {
                     token: shell.wl_storage.storage.native_token.clone(),
                 },
                 &keypair,
-                Epoch(0),
                 0.into(),
                 raw_tx.clone(),
                 Default::default(),
@@ -794,7 +792,7 @@ mod test_finalize_block {
                 None,
             );
             let wrapper = wrapper_tx
-                .sign(&keypair, shell.chain_id.clone())
+                .sign(&keypair, shell.chain_id.clone(), None)
                 .expect("Test failed");
             valid_txs.push(wrapper_tx);
             processed_txs.push(ProcessedTx {
@@ -868,6 +866,7 @@ mod test_finalize_block {
             tx_code,
             Some("Encrypted transaction data".as_bytes().to_owned()),
             shell.chain_id.clone(),
+            None,
         );
         let wrapper_tx = WrapperTx::new(
             Fee {
@@ -875,7 +874,6 @@ mod test_finalize_block {
                 token: shell.wl_storage.storage.native_token.clone(),
             },
             &keypair,
-            Epoch(0),
             0.into(),
             raw_tx.clone(),
             Default::default(),

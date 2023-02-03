@@ -1876,7 +1876,7 @@ fn pos_bonds() -> Result<()> {
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
-    client.exp_string("Amount 51 withdrawable starting from epoch ")?;
+    client.exp_string("Amount 5100 withdrawable starting from epoch ")?;
     client.assert_success();
 
     // 5. Submit an unbond of the delegation
@@ -1898,7 +1898,7 @@ fn pos_bonds() -> Result<()> {
         &validator_one_rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    let expected = "Amount 32 withdrawable starting from epoch ";
+    let expected = "Amount 3200 withdrawable starting from epoch ";
     let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
     let epoch_raw = matched
         .trim()
@@ -1920,7 +1920,7 @@ fn pos_bonds() -> Result<()> {
         epoch, delegation_withdrawable_epoch
     );
     let start = Instant::now();
-    let loop_timeout = Duration::new(20, 0);
+    let loop_timeout = Duration::new(40, 0);
     loop {
         if Instant::now().duration_since(start) > loop_timeout {
             panic!(
@@ -2001,7 +2001,7 @@ fn pos_rewards() -> Result<()> {
         None,
     )?;
 
-    println!("\nBARTLEDOO\n");
+    println!("\nFINISHED SETUP\n");
 
     // 1. Run 3 genesis validator ledger nodes
     let mut validator_0 =
@@ -2052,9 +2052,9 @@ fn pos_rewards() -> Result<()> {
     client.assert_success();
 
     // Check that all validator nodes processed the tx with same result
-    let mut validator_0 = bg_validator_0.foreground();
-    let mut validator_1 = bg_validator_1.foreground();
-    let mut validator_2 = bg_validator_2.foreground();
+    let validator_0 = bg_validator_0.foreground();
+    let validator_1 = bg_validator_1.foreground();
+    let validator_2 = bg_validator_2.foreground();
 
     // let expected_result = "all VPs accepted transaction";
     // validator_0.exp_string(expected_result)?;

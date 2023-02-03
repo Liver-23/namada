@@ -889,7 +889,32 @@ pub fn genesis(num_validators: u64) -> Genesis {
     // `namada reset` command. To generate a new validator, use the
     // `tests::gen_genesis_validator` below.
     let mut validators = Vec::<Validator>::new();
-    for _ in 0..num_validators {
+
+    // Use hard-coded keys for the first validator to avoid breaking other code
+    let consensus_keypair = wallet::defaults::validator_keypair();
+    let account_keypair = wallet::defaults::validator_keypair();
+    let address = wallet::defaults::validator_address();
+    let (protocol_keypair, dkg_keypair) = wallet::defaults::validator_keys();
+    let validator = Validator {
+        pos_data: GenesisValidator {
+            address,
+            tokens: token::Amount::whole(200_000),
+            consensus_key: consensus_keypair.ref_to(),
+            commission_rate: dec!(0.05),
+            max_commission_rate_change: dec!(0.01),
+        },
+        account_key: account_keypair.ref_to(),
+        protocol_key: protocol_keypair.ref_to(),
+        dkg_public_key: dkg_keypair.public(),
+        non_staked_balance: token::Amount::whole(100_000),
+        // TODO replace with https://github.com/anoma/namada/issues/25)
+        validator_vp_code_path: vp_user_path.into(),
+        validator_vp_sha256: Default::default(),
+    };
+    validators.push(validator);
+
+    // Add other validators with randomly generated keys if needed
+    for _ in 0..(num_validators - 1) {
         let consensus_keypair: common::SecretKey =
             testing::gen_keypair::<ed25519::SigScheme>()
                 .try_to_sk()
@@ -914,29 +939,8 @@ pub fn genesis(num_validators: u64) -> Genesis {
             validator_vp_code_path: vp_user_path.into(),
             validator_vp_sha256: Default::default(),
         };
-
         validators.push(validator);
     }
-
-    // let account_keypair = wallet::defaults::validator_keypair();
-    // let address = wallet::defaults::validator_address();
-    // let (protocol_keypair, dkg_keypair) = wallet::defaults::validator_keys();
-    // let validator = Validator {
-    //     pos_data: GenesisValidator {
-    //         address,
-    //         tokens: token::Amount::whole(200_000),
-    //         consensus_key: consensus_keypair.ref_to(),
-    //         commission_rate: dec!(0.05),
-    //         max_commission_rate_change: dec!(0.01),
-    //     },
-    //     account_key: account_keypair.ref_to(),
-    //     protocol_key: protocol_keypair.ref_to(),
-    //     dkg_public_key: dkg_keypair.public(),
-    //     non_staked_balance: token::Amount::whole(100_000),
-    //     // TODO replace with https://github.com/anoma/namada/issues/25)
-    //     validator_vp_code_path: vp_user_path.into(),
-    //     validator_vp_sha256: Default::default(),
-    // };
 
     let parameters = Parameters {
         epoch_duration: EpochDuration {

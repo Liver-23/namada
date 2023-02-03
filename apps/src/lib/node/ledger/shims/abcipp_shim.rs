@@ -5,8 +5,9 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
-#[cfg(not(feature = "abcipp"))]
-use namada::ledger::pos::namada_proof_of_stake::PosBase;
+use namada::proof_of_stake::{
+    find_validator_by_raw_hash, write_current_block_proposer_address,
+};
 use namada::types::address::Address;
 #[cfg(not(feature = "abcipp"))]
 use namada::types::hash::Hash;
@@ -102,12 +103,12 @@ impl AbcippShim {
                             let tm_raw_hash_string = tm_raw_hash_to_string(
                                 proposal.proposer_address.clone(),
                             );
-                            let native_proposer_address = self
-                                .service
-                                .storage
-                                .read_validator_address_raw_hash(
+                            let native_proposer_address =
+                                find_validator_by_raw_hash(
+                                    &self.service.wl_storage,
                                     tm_raw_hash_string,
                                 )
+                                .unwrap()
                                 .expect(
                                     "Unable to find native validator address \
                                      of block proposer from tendermint raw \
@@ -117,11 +118,11 @@ impl AbcippShim {
                                 "BLOCK PROPOSER (PROCESSPROPOSAL): {}",
                                 native_proposer_address
                             );
-                            self.service
-                                .storage
-                                .write_current_block_proposer_address(
-                                    &native_proposer_address,
-                                );
+                            write_current_block_proposer_address(
+                                &mut self.service.wl_storage,
+                                native_proposer_address,
+                            )
+                            .unwrap();
                         }
                     }
                     self.service

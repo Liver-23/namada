@@ -734,7 +734,7 @@ where
 
         println!(
             "Next epoch min start height = {}",
-            self.next_epoch_min_start_height
+            self.next_epoch_min_start_height.0 + 2
         );
         println!(
             "Epoch duration satisfied = {}",
@@ -770,11 +770,7 @@ where
                 .pred_epochs
                 .new_epoch(height, evidence_max_age_num_blocks);
             tracing::info!("Began a new epoch {}", self.block.epoch);
-            println!(
-                "NEW EPOCH Next epoch min start height = {}",
-                self.next_epoch_min_start_height
-            );
-//            self.update_allowed_conversions()?;
+            //            self.update_allowed_conversions()?;
         }
         self.update_epoch_in_merkle_tree()?;
         Ok(new_epoch)

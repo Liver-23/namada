@@ -31,6 +31,7 @@ where
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
+        num_validators: u64,
     ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         let (current_chain_id, _) = self.wl_storage.storage.get_chain_id();
@@ -56,7 +57,7 @@ where
             );
         }
         #[cfg(feature = "dev")]
-        let genesis = genesis::genesis(3);
+        let genesis = genesis::genesis(num_validators);
 
         let ts: protobuf::Timestamp = init.time.expect("Missing genesis time");
         let initial_height = init
@@ -323,7 +324,7 @@ where
             total_staked_nam_tokens += validator.pos_data.tokens;
             total_nam_balance +=
                 validator.pos_data.tokens + validator.non_staked_balance;
-            // Account balance (tokens no staked in PoS)
+            // Account balance (tokens not staked in PoS)
             self.wl_storage
                 .write(
                     &token::balance_key(
@@ -361,23 +362,19 @@ where
         );
         println!("TOTAL NAM BALANCE = {}", total_nam_balance);
         println!("TOTAL STAKED NAM BALANCE = {}\n", total_staked_nam_tokens);
-        self.storage
+        self.wl_storage
             .write(
                 &total_supply_key(&staking_token_address()),
-                total_nam_balance
-                    .try_to_vec()
-                    .expect("encode initial total NAM balance"),
+                total_nam_balance,
             )
             .expect("unable to set total NAM balance in storage");
 
         // Set the ratio of staked to total NAM tokens in the parameters storage
-        self.storage
+        self.wl_storage
             .write(
                 &get_staked_ratio_key(),
-                (Decimal::from(total_staked_nam_tokens)
-                    / Decimal::from(total_nam_balance))
-                .try_to_vec()
-                .expect("encode initial NAM staked ratio"),
+                Decimal::from(total_staked_nam_tokens)
+                    / Decimal::from(total_nam_balance),
             )
             .expect("unable to set staked ratio of NAM in storage");
 
@@ -385,8 +382,6 @@ where
 
         // Set the initial validator set
         for validator in genesis.validators {
-            // dbg!(&validator.pos_data);
-
             let mut abci_validator = abci::ValidatorUpdate::default();
             let consensus_key: common::PublicKey =
                 validator.pos_data.consensus_key.clone();

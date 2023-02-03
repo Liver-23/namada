@@ -2555,6 +2555,7 @@ name = "namada_proof_of_stake"
 version = "0.14.0"
 dependencies = [
  "borsh",
+ "data-encoding",
  "derivative",
  "hex",
  "namada_core",

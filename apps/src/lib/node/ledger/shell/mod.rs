@@ -14,7 +14,7 @@ mod process_proposal;
 pub(super) mod queries;
 mod vote_extensions;
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -378,26 +378,30 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    let key = Key::from(DbKeySeg::StringSeg(
-        "ethereum_oracle_last_processed_block".to_owned(),
-    ));
-    let initial_value: u64 = 1;
+    let local_node_initial_values = HashMap::from([(
+        Key::from(DbKeySeg::StringSeg(
+            "ethereum_oracle_last_processed_block".to_owned(),
+        )),
+        1u64,
+    )]);
 
-    let (has_key, _) = storage.has_key(&key).unwrap();
-    if !has_key {
-        tracing::info!(
-            ?key,
-            ?initial_value,
-            "Writing initial value for local node configuration key"
-        );
-        StorageWrite::write(storage, &key, initial_value).unwrap();
-    } else {
-        let value: u64 = StorageRead::read(storage, &key).unwrap().unwrap();
-        tracing::info!(
-            ?key,
-            ?value,
-            "Value already present for local node configuration key"
-        );
+    for (key, initial_value) in local_node_initial_values {
+        let (has_key, _) = storage.has_key(&key).unwrap();
+        if !has_key {
+            tracing::info!(
+                ?key,
+                ?initial_value,
+                "Writing initial value for local node configuration key"
+            );
+            StorageWrite::write(storage, &key, initial_value).unwrap();
+        } else {
+            let value: u64 = StorageRead::read(storage, &key).unwrap().unwrap();
+            tracing::info!(
+                ?key,
+                ?value,
+                "Value already present for local node configuration key"
+            );
+        }
     }
 }
 

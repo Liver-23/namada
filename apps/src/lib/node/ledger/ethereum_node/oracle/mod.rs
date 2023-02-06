@@ -30,6 +30,7 @@ pub struct Oracle {
     /// A channel for sending processed and confirmed
     /// events to the ledger process
     sender: BoundedSender<EthereumEvent>,
+    // TODO: add channel here to pump out processed blocks
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
     /// A channel for controlling and configuring the oracle.

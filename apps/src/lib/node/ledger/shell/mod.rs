@@ -35,7 +35,7 @@ use namada::ledger::protocol::ShellParams;
 use namada::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{DBIter, Storage, DB};
-use namada::ledger::storage_api::StorageWrite;
+use namada::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::ledger::{pos, protocol};
 use namada::proto::{self, Tx};
 use namada::types::address::{masp, masp_tx_key, Address};
@@ -381,21 +381,22 @@ where
     let key = Key::from(DbKeySeg::StringSeg(
         "ethereum_oracle_last_processed_block".to_owned(),
     ));
-    let value: u64 = 1;
+    let initial_value: u64 = 1;
 
     let (has_key, _) = storage.has_key(&key).unwrap();
     if !has_key {
         tracing::info!(
             ?key,
-            ?value,
+            ?initial_value,
             "Writing initial value for local node configuration key"
         );
-        StorageWrite::write(storage, &key, value).unwrap();
+        StorageWrite::write(storage, &key, initial_value).unwrap();
     } else {
+        let value: u64 = StorageRead::read(storage, &key).unwrap().unwrap();
         tracing::info!(
             ?key,
             ?value,
-            "Writing initial value for local node configuration key"
+            "Value already present for local node configuration key"
         );
     }
 }

@@ -16,6 +16,7 @@ mod vote_extensions;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
+use std::fmt::{self, Display, Formatter};
 use std::mem;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
@@ -371,6 +372,29 @@ impl EthereumOracleChannels {
     }
 }
 
+/// Values in storage that are to do with the local node rather than the
+/// blockchain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum LocalNodeValue {
+    EthereumOracleLastProcessedBlock,
+}
+
+impl Display for LocalNodeValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            LocalNodeValue::EthereumOracleLastProcessedBlock => {
+                write!(f, "ethereum_oracle_last_processed_block")
+            }
+        }
+    }
+}
+
+impl From<LocalNodeValue> for Key {
+    fn from(value: LocalNodeValue) -> Self {
+        Key::from(DbKeySeg::StringSeg(value.to_string()))
+    }
+}
+
 /// We store some values in storage which are to do with our local node, rather
 /// than any specific chain.
 fn ensure_local_node_values_configured<D, H>(storage: &mut Storage<D, H>)
@@ -379,13 +403,12 @@ where
     H: StorageHasher + Sync + 'static,
 {
     let local_node_initial_values = HashMap::from([(
-        Key::from(DbKeySeg::StringSeg(
-            "ethereum_oracle_last_processed_block".to_owned(),
-        )),
+        LocalNodeValue::EthereumOracleLastProcessedBlock,
         1u64,
     )]);
 
     for (key, initial_value) in local_node_initial_values {
+        let key: Key = key.into();
         let (has_key, _) = storage.has_key(&key).unwrap();
         if !has_key {
             tracing::info!(

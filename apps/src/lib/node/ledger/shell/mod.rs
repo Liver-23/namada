@@ -440,6 +440,18 @@ where
     StorageRead::read(storage, &key).unwrap().unwrap()
 }
 
+fn write_local_node_value<D, H, T: BorshSerialize + BorshDeserialize>(
+    storage: &mut Storage<D, H>,
+    key: LocalNodeValue,
+    value: T,
+) where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    let key: Key = key.into();
+    StorageWrite::write(storage, &key, value).unwrap();
+}
+
 impl<D, H> Shell<D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,

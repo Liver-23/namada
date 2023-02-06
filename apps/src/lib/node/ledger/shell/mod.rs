@@ -428,6 +428,18 @@ where
     }
 }
 
+fn read_local_node_value<D, H, T: BorshSerialize + BorshDeserialize>(
+    storage: &Storage<D, H>,
+    key: LocalNodeValue,
+) -> T
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    let key: Key = key.into();
+    StorageRead::read(storage, &key).unwrap().unwrap()
+}
+
 impl<D, H> Shell<D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -838,11 +850,20 @@ where
                 );
                 return;
             };
+            let start_block: u64 = read_local_node_value(
+                &self.storage,
+                LocalNodeValue::EthereumOracleLastProcessedBlock,
+            );
+            tracing::info!(
+                ?start_block,
+                "Found Ethereum height from which the Ethereum oracle should \
+                 start"
+            );
             let config = oracle::config::Config {
                 min_confirmations: config.min_confirmations.into(),
                 bridge_contract: config.contracts.bridge.address,
                 governance_contract: config.contracts.governance.address,
-                start_block: 0,
+                start_block,
             };
             tracing::info!(
                 ?config,

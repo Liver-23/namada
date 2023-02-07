@@ -804,11 +804,18 @@ where
                 .borrow()
                 .as_deref()
             {
-                Some(mrpb) => tracing::info!(
-                    "Ethereum oracle's most recently processed Ethereum block \
-                     is {}",
-                    mrpb
-                ),
+                Some(mrpb) => {
+                    tracing::info!(
+                        "Ethereum oracle's most recently processed Ethereum \
+                         block is {}",
+                        mrpb
+                    );
+                    write_local_node_value(
+                        &mut self.storage,
+                        LocalNodeValue::EthereumOracleLastProcessedBlock,
+                        mrpb.to_u64().unwrap(), // TODO: is u64 appropriate?
+                    )
+                }
                 None => tracing::info!(
                     "Ethereum oracle has not yet fully processed any Ethereum \
                      blocks"

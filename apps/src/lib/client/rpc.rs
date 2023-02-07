@@ -1755,9 +1755,9 @@ pub async fn query_bonded_stake(ctx: Context, args: args::QueryBondedStake) {
                     };
                     let is_active = validator_set.active.contains(&weighted);
                     if !is_active {
-                        debug_assert!(validator_set
-                            .inactive
-                            .contains(&weighted));
+                        debug_assert!(
+                            validator_set.inactive.contains(&weighted)
+                        );
                     }
                     println!(
                         "Validator {} is {}, bonded stake: {}",

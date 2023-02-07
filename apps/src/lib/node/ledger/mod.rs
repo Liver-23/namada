@@ -24,6 +24,7 @@ use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
 use self::ethereum_node::eth_fullnode;
+use self::ethereum_node::oracle::most_recently_processed_block_watch;
 use self::shell::EthereumOracleChannels;
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
@@ -640,6 +641,10 @@ async fn maybe_start_ethereum_oracle(
     // Start the oracle for listening to Ethereum events
     let (eth_sender, eth_receiver) =
         mpsc::channel(config.ethereum_bridge.channel_buffer_size);
+    let (
+        most_recently_processed_block_sender,
+        most_recently_processed_block_receiver,
+    ) = most_recently_processed_block_watch();
     let (control_sender, control_receiver) = oracle::control::channel();
 
     match config.ethereum_bridge.mode {
@@ -649,6 +654,7 @@ async fn maybe_start_ethereum_oracle(
                 ethereum_url,
                 eth_sender,
                 control_receiver,
+                most_recently_processed_block_sender,
             );
 
             EthereumOracleTask::Enabled {
@@ -656,6 +662,7 @@ async fn maybe_start_ethereum_oracle(
                 channels: EthereumOracleChannels::new(
                     eth_receiver,
                     control_sender,
+                    most_recently_processed_block_receiver,
                 ),
             }
         }
@@ -704,6 +711,7 @@ async fn maybe_start_ethereum_oracle(
                 channels: EthereumOracleChannels::new(
                     eth_receiver,
                     control_sender,
+                    most_recently_processed_block_receiver,
                 ),
             }
         }

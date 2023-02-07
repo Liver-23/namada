@@ -55,7 +55,9 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
-use super::ethereum_node::oracle;
+use super::ethereum_node::oracle::{
+    self, MostRecentlyProcessedBlockedReceiver,
+};
 use crate::config::{genesis, TendermintMode};
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
@@ -358,16 +360,21 @@ where
 pub struct EthereumOracleChannels {
     ethereum_receiver: EthereumReceiver,
     control_sender: oracle::control::Sender,
+    most_recently_processed_block_receiver:
+        MostRecentlyProcessedBlockedReceiver,
 }
 
 impl EthereumOracleChannels {
     pub fn new(
         events_receiver: Receiver<EthereumEvent>,
         control_sender: oracle::control::Sender,
+        most_recently_processed_block_receiver:
+            MostRecentlyProcessedBlockedReceiver,
     ) -> Self {
         Self {
             ethereum_receiver: EthereumReceiver::new(events_receiver),
             control_sender,
+            most_recently_processed_block_receiver,
         }
     }
 }
@@ -787,6 +794,28 @@ where
         );
         response.data = root.0.to_vec();
 
+        if let ShellMode::Validator {
+            eth_oracle: Some(eth_oracle),
+            ..
+        } = &self.mode
+        {
+            match eth_oracle
+                .most_recently_processed_block_receiver
+                .borrow()
+                .as_deref()
+            {
+                Some(mrpb) => tracing::info!(
+                    "Ethereum oracle's most recently processed Ethereum block \
+                     is {}",
+                    mrpb
+                ),
+                None => tracing::info!(
+                    "Ethereum oracle has not yet fully processed any Ethereum \
+                     blocks"
+                ),
+            }
+        }
+
         #[cfg(not(feature = "abcipp"))]
         {
             use crate::node::ledger::shell::vote_extensions::iter_protocol_txs;
@@ -1118,6 +1147,7 @@ mod test_utils {
         RequestInitChain, RequestProcessProposal,
     };
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
+    use crate::node::ledger::ethereum_node::oracle::most_recently_processed_block_watch;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
@@ -1260,9 +1290,14 @@ mod test_utils {
             let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
             let (eth_sender, eth_receiver) =
                 tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
+            let (_, most_recently_processed_block_receiver) =
+                most_recently_processed_block_watch();
             let (control_sender, control_receiver) = oracle::control::channel();
-            let eth_oracle =
-                EthereumOracleChannels::new(eth_receiver, control_sender);
+            let eth_oracle = EthereumOracleChannels::new(
+                eth_receiver,
+                control_sender,
+                most_recently_processed_block_receiver,
+            );
             let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
             let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
             let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
@@ -1432,8 +1467,13 @@ mod test_utils {
         let (_, eth_receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let (control_sender, _) = oracle::control::channel();
-        let eth_oracle =
-            EthereumOracleChannels::new(eth_receiver, control_sender);
+        let (_, most_recently_processed_block_receiver) =
+            most_recently_processed_block_watch();
+        let eth_oracle = EthereumOracleChannels::new(
+            eth_receiver,
+            control_sender,
+            most_recently_processed_block_receiver,
+        );
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let native_token = address::nam();
@@ -1499,8 +1539,13 @@ mod test_utils {
         let (_, eth_receiver) =
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let (control_sender, _) = oracle::control::channel();
-        let eth_oracle =
-            EthereumOracleChannels::new(eth_receiver, control_sender);
+        let (_, most_recently_processed_block_receiver) =
+            most_recently_processed_block_watch();
+        let eth_oracle = EthereumOracleChannels::new(
+            eth_receiver,
+            control_sender,
+            most_recently_processed_block_receiver,
+        );
         // Reboot the shell and check that the queue was restored from DB
         let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(

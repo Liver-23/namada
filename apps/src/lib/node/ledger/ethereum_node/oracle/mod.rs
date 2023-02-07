@@ -9,6 +9,7 @@ use eyre::{eyre, Result};
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
 use tokio::sync::mpsc::Sender as BoundedSender;
+use tokio::sync::watch;
 use tokio::task::LocalSet;
 #[cfg(not(test))]
 use web30::client::Web3;
@@ -21,6 +22,17 @@ use super::test_tools::mock_web3_client::Web3;
 /// The default amount of time the oracle will wait between processing blocks
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_secs(1);
 
+pub type MostRecentlyProcessedBlockSender = watch::Sender<Option<Uint256>>;
+pub type MostRecentlyProcessedBlockedReceiver =
+    watch::Receiver<Option<Uint256>>;
+
+pub fn most_recently_processed_block_watch() -> (
+    MostRecentlyProcessedBlockSender,
+    MostRecentlyProcessedBlockedReceiver,
+) {
+    watch::channel(None)
+}
+
 /// A client that can talk to geth and parse
 /// and relay events relevant to Namada to the
 /// ledger process
@@ -30,7 +42,8 @@ pub struct Oracle {
     /// A channel for sending processed and confirmed
     /// events to the ledger process
     sender: BoundedSender<EthereumEvent>,
-    // TODO: add channel here to pump out processed blocks
+    /// The most recently processed block is recorded here.
+    most_recently_processed_block: MostRecentlyProcessedBlockSender,
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
     /// A channel for controlling and configuring the oracle.
@@ -51,6 +64,7 @@ impl Oracle {
     pub fn new(
         url: &str,
         sender: BoundedSender<EthereumEvent>,
+        most_recently_processed_block: MostRecentlyProcessedBlockSender,
         backoff: Duration,
         control: control::Receiver,
     ) -> Self {
@@ -58,6 +72,7 @@ impl Oracle {
             client: Web3::new(url, std::time::Duration::from_secs(30)),
             sender,
             backoff,
+            most_recently_processed_block,
             control,
         }
     }
@@ -106,6 +121,7 @@ pub fn run_oracle(
     url: impl AsRef<str>,
     sender: BoundedSender<EthereumEvent>,
     control: control::Receiver,
+    most_recently_processed_block: MostRecentlyProcessedBlockSender,
 ) -> tokio::task::JoinHandle<()> {
     let url = url.as_ref().to_owned();
     // we have to run the oracle in a [`LocalSet`] due to the web30
@@ -117,8 +133,13 @@ pub fn run_oracle(
                 .run_until(async move {
                     tracing::info!(?url, "Ethereum event oracle is starting");
 
-                    let oracle =
-                        Oracle::new(&url, sender, DEFAULT_BACKOFF, control);
+                    let oracle = Oracle::new(
+                        &url,
+                        sender,
+                        most_recently_processed_block,
+                        DEFAULT_BACKOFF,
+                        control,
+                    );
                     run_oracle_aux(oracle).await;
 
                     tracing::info!(
@@ -166,7 +187,10 @@ async fn run_oracle_aux(mut oracle: Oracle) {
         tokio::select! {
             result = process(&oracle, &config, &mut pending, next_block_to_process.clone()) => {
                 match result {
-                    Ok(()) => next_block_to_process += 1u8.into(),
+                    Ok(()) => {
+                        oracle.most_recently_processed_block.send(Some(next_block_to_process.clone())).unwrap();
+                        next_block_to_process += 1u8.into()
+                    },
                     Err(error) => tracing::warn!(
                         ?error,
                         block = ?next_block_to_process,
@@ -401,11 +425,14 @@ mod test_oracle {
     fn setup() -> TestPackage {
         let (admin_channel, blocks_processed_recv, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
+        let (most_recently_processed_block_sender, _) = watch::channel(None);
         let (control_sender, control_receiver) = control::channel();
         TestPackage {
             oracle: Oracle {
                 client,
                 sender: eth_sender,
+                most_recently_processed_block:
+                    most_recently_processed_block_sender,
                 // backoff should be short for tests so that they run faster
                 backoff: Duration::from_millis(5),
                 control: control_receiver,

@@ -97,26 +97,22 @@ pub fn compute_tally(
                     if proposal_type == vote_type {
                         total_yay_staked_tokens += amount;
                     } else {
-                        return ProposalResult {
-                            result: TallyResult::Failed(format!(
-                                "Unexpected vote type. Expected: {}, Found: {}",
-                                proposal_type, validator_vote
-                            )),
-                            total_voting_power: total_stake,
-                            total_yay_power: 0,
-                            total_nay_power: 0,
-                        };
+                        // Log the error and continue
+                        tracing::error!(
+                            "Unexpected vote type. Expected: {}, Found: {}",
+                            proposal_type,
+                            validator_vote
+                        );
+                        continue;
                     }
                 } else {
-                    return ProposalResult {
-                        result: TallyResult::Failed(format!(
-                            "Unexpected vote type. Expected: {}, Found: {}",
-                            proposal_type, validator_vote
-                        )),
-                        total_voting_power: total_stake,
-                        total_yay_power: 0,
-                        total_nay_power: 0,
-                    };
+                    // Log the error and continue
+                    tracing::error!(
+                        "Unexpected vote type. Expected: {}, Found: {}",
+                        proposal_type,
+                        validator_vote
+                    );
+                    continue;
                 }
             }
 
@@ -143,16 +139,13 @@ pub fn compute_tally(
                         }
 
                         _ => {
-                            return ProposalResult {
-                                result: TallyResult::Failed(format!(
-                                    "Unexpected vote type. Expected: {}, \
-                                     Found: {}",
-                                    proposal_type, delegator_vote
-                                )),
-                                total_voting_power: total_stake,
-                                total_yay_power: 0,
-                                total_nay_power: 0,
-                            };
+                            // Log the error and continue
+                            tracing::error!(
+                                "Unexpected vote type. Expected: {}, Found: {}",
+                                proposal_type,
+                                delegator_vote
+                            );
+                            continue;
                         }
                     }
                 }
@@ -199,16 +192,12 @@ pub fn compute_tally(
                             amount;
                     }
                 } else {
-                    return ProposalResult {
-                        result: TallyResult::Failed(format!(
-                            "Unexpected vote type. Expected: PGFCouncil, \
-                             Found: {}",
-                            validator_vote
-                        )),
-                        total_voting_power: total_stake,
-                        total_yay_power: 0,
-                        total_nay_power: 0,
-                    };
+                    // Log the error and continue
+                    tracing::error!(
+                        "Unexpected vote type. Expected: PGFCouncil, Found: {}",
+                        validator_vote
+                    );
+                    continue;
                 }
             }
 
@@ -258,19 +247,12 @@ pub fn compute_tally(
                                             }
                                         }
                                     } else {
-                                        return ProposalResult {
-                                            result: TallyResult::Failed(
-                                                format!(
-                                                    "Unexpected vote type. \
-                                                     Expected: PGFCouncil, \
-                                                     Found: {}",
-                                                    validator_vote
-                                                ),
-                                            ),
-                                            total_voting_power: total_stake,
-                                            total_yay_power: 0,
-                                            total_nay_power: 0,
-                                        };
+                                        // Log the error and continue
+                                        tracing::error!(
+                        "Unexpected vote type. Expected: PGFCouncil, Found: {}",
+                        validator_vote
+                    );
+                                        continue;
                                     }
                                 }
                                 None => {
@@ -322,34 +304,23 @@ pub fn compute_tally(
                                             }
                                         }
                                     } else {
-                                        return ProposalResult {
-                                            result: TallyResult::Failed(
-                                                format!(
-                                                    "Unexpected vote type. \
-                                                     Expected: PGFCouncil, \
-                                                     Found: {}",
-                                                    validator_vote
-                                                ),
-                                            ),
-                                            total_voting_power: total_stake,
-                                            total_yay_power: 0,
-                                            total_nay_power: 0,
-                                        };
+                                        // Log the error and continue
+                                        tracing::error!(
+                        "Unexpected vote type. Expected: PGFCouncil, Found: {}",
+                        validator_vote
+                    );
+                                        continue;
                                     }
                                 }
                             }
                         }
                         _ => {
-                            return ProposalResult {
-                                result: TallyResult::Failed(format!(
-                                    "Unexpected vote type. Expected: \
-                                     PGFCouncil, Found: {}",
-                                    delegator_vote
-                                )),
-                                total_voting_power: total_stake,
-                                total_yay_power: 0,
-                                total_nay_power: 0,
-                            };
+                            // Log the error and continue
+                            tracing::error!(
+                        "Unexpected vote type. Expected: PGFCouncil, Found: {}",
+                        delegator_vote
+                    );
+                            continue;
                         }
                     }
                 }

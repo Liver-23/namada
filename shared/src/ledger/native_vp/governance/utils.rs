@@ -167,7 +167,7 @@ pub fn compute_tally(
                         return Err(Error::Tally(format!(
                             "Unexpected proposal type: {}",
                             proposal_type
-                        )))
+                        )));
                     }
                 };
 
@@ -237,7 +237,14 @@ pub fn compute_tally(
                                                 {
                                                     *power -= vote_power;
                                                 } else {
-                                                    return Err(Error::Tally(format!("Expected PGF vote {:?} was not in tally", vote)));
+                                                    return Err(Error::Tally(
+                                                        format!(
+                                                            "Expected PGF \
+                                                             vote {:?} was \
+                                                             not in tally",
+                                                            vote
+                                                        ),
+                                                    ));
                                                 }
                                             } else {
                                                 // Validator didn't vote for
@@ -250,9 +257,10 @@ pub fn compute_tally(
                                     } else {
                                         // Log the error and continue
                                         tracing::error!(
-                        "Unexpected vote type. Expected: PGFCouncil, Found: {}",
-                        validator_vote
-                    );
+                                            "Unexpected vote type. Expected: \
+                                             PGFCouncil, Found: {}",
+                                            validator_vote
+                                        );
                                         continue;
                                     }
                                 }
@@ -290,9 +298,8 @@ pub fn compute_tally(
                                             } else {
                                                 return Err(Error::Tally(
                                                     format!(
-                                                        "Expected PGF \
-                                                             vote {:?} was \
-                                                             not in tally",
+                                                        "Expected PGF vote \
+                                                         {:?} was not in tally",
                                                         vote
                                                     ),
                                                 ));
@@ -301,9 +308,10 @@ pub fn compute_tally(
                                     } else {
                                         // Log the error and continue
                                         tracing::error!(
-                        "Unexpected vote type. Expected: PGFCouncil, Found: {}",
-                        validator_vote
-                    );
+                                            "Unexpected vote type. Expected: \
+                                             PGFCouncil, Found: {}",
+                                            validator_vote
+                                        );
                                         continue;
                                     }
                                 }
@@ -312,9 +320,10 @@ pub fn compute_tally(
                         _ => {
                             // Log the error and continue
                             tracing::error!(
-                        "Unexpected vote type. Expected: PGFCouncil, Found: {}",
-                        delegator_vote
-                    );
+                                "Unexpected vote type. Expected: PGFCouncil, \
+                                 Found: {}",
+                                delegator_vote
+                            );
                             continue;
                         }
                     }

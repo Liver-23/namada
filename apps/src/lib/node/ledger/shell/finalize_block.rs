@@ -400,17 +400,6 @@ where
             self.update_epoch(&mut response);
         }
 
-        let rewards_acc: HashMap<Address, Decimal> =
-            rewards_accumulator_handle()
-                .iter(&self.wl_storage)?
-                .map(|a| a.unwrap())
-                .collect();
-        let sum = rewards_acc
-            .clone()
-            .into_iter()
-            .fold(Decimal::ZERO, |sum, elm| sum + elm.1);
-        dbg!(&rewards_acc, sum);
-
         // Read the block proposer of the previously committed block in storage
         // (n-1 if we are in the process of finalizing n right now).
         match read_last_block_proposer_address(&self.wl_storage)? {
@@ -509,6 +498,13 @@ where
                 }
             }
         }
+
+        let rewards_acc: HashMap<Address, Decimal> =
+            rewards_accumulator_handle()
+                .iter(&self.wl_storage)?
+                .map(|a| a.unwrap())
+                .collect();
+        dbg!(&rewards_acc);
 
         let _ = self
             .gas_meter
@@ -625,12 +621,29 @@ where
         // Calculate the fractional block rewards for the previous block (final
         // block of the previous epoch), which also gives the final
         // accumulator value updates
+        let rewards_acc: HashMap<Address, Decimal> =
+            rewards_accumulator_handle()
+                .iter(&self.wl_storage)?
+                .map(|a| a.unwrap())
+                .collect();
+
+        println!("REWARDS ACC BEFORE LOGGIN REWARDS IN APPLY INFLATION:");
+        dbg!(rewards_acc);
         namada_proof_of_stake::log_block_rewards(
             &mut self.wl_storage,
             last_epoch,
             proposer_address,
             votes,
         )?;
+
+        let rewards_acc: HashMap<Address, Decimal> =
+            rewards_accumulator_handle()
+                .iter(&self.wl_storage)?
+                .map(|a| a.unwrap())
+                .collect();
+
+        println!("REWARDS ACC AFTER LOGGIN REWARDS IN APPLY INFLATION:");
+        dbg!(rewards_acc);
 
         // TODO: review if the appropriate epoch is being used (last vs now)
         let params = read_pos_params(&self.wl_storage)?;
@@ -762,9 +775,14 @@ where
                 .collect();
         dbg!(&rewards_acc);
 
-        for acc in rewards_accumulator_handle().iter(&self.wl_storage)? {
-            let (address, value) = acc?;
-            println!("\nAccumulator for validator {}", address.clone());
+        // for acc in rewards_accumulator_handle().iter(&self.wl_storage)? {
+        for (address, value) in rewards_acc.clone() {
+            // let (address, value) = acc?;
+            println!(
+                "\nAccumulator for validator {} with value {}",
+                address.clone(),
+                value
+            );
 
             val_sum += value;
 
@@ -808,12 +826,14 @@ where
             dbg!(&reward);
             if reward < reward_tokens_remaining {
                 reward_tokens_remaining -= reward;
+            } else {
+                reward_tokens_remaining = 0;
             }
         }
 
         println!(
-            "Current: block {}, epoch {}\nSum of values = {}\nSum of weighted \
-             values = {}",
+            "\nCurrent: block {}, epoch {}\nSum of values = {}\nSum of \
+             weighted values = {}",
             self.wl_storage.storage.block.height,
             self.wl_storage.storage.block.epoch,
             val_sum,
@@ -870,11 +890,19 @@ where
             )
             .expect("unable to encode new locked ratio (Decimal)");
 
+        println!("DELETING REWARDS ACCUMULATOR...");
+
         // Delete the accumulators from storage
-        self.wl_storage
-            .storage
-            .delete(&consensus_validator_rewards_accumulator_key())
-            .unwrap();
+        // TODO: may want better way to implement this (for lazy PoS in general)
+        for (address, _) in rewards_acc {
+            rewards_accumulator_handle()
+                .remove(&mut self.wl_storage, &address)?;
+        }
+
+        // self.wl_storage
+        //     .storage
+        //     .delete(&consensus_validator_rewards_accumulator_key())
+        //     .unwrap();
 
         Ok(())
     }

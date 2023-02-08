@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use clarity::Address;
 use eyre::{eyre, Result};
-use namada::eth_bridge::ethereum;
+use namada::core::types::ethereum;
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
 use tokio::sync::mpsc::Sender as BoundedSender;

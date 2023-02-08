@@ -1,6 +1,6 @@
 //! Functionality to do with publishing which blocks we have processed.
 
-use namada::eth_bridge::ethereum;
+use namada::core::types::ethereum;
 use tokio::sync::watch;
 
 pub type Sender = watch::Sender<Option<ethereum::BlockHeight>>;

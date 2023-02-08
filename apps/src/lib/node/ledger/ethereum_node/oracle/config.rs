@@ -1,7 +1,7 @@
 //! Configuration for an oracle.
 use std::num::NonZeroU64;
 
-use namada::eth_bridge::ethereum;
+use namada::core::types::ethereum;
 use namada::types::ethereum_events::EthAddress;
 
 /// Configuration for an oracle.

@@ -13,10 +13,11 @@ mod prepare_proposal;
 mod process_proposal;
 pub(super) mod queries;
 mod vote_extensions;
+// TODO: tidy up LocalNodeValue code etc!
+// TODO: write e2e test!
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
-use std::fmt::{self, Display, Formatter};
 use std::mem;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
@@ -24,7 +25,7 @@ use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::core::ledger::eth_bridge;
-use namada::eth_bridge::ethereum;
+use namada::core::types::ethereum;
 use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeConfig};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
@@ -34,17 +35,20 @@ use namada::ledger::pos::namada_proof_of_stake::types::{
 };
 use namada::ledger::pos::namada_proof_of_stake::PosBase;
 use namada::ledger::protocol::ShellParams;
+use namada::ledger::storage::local::{
+    ensure_local_node_values_configured, read_local_node_value,
+    write_local_node_value, LocalNodeValue,
+};
 use namada::ledger::storage::traits::{Sha256Hasher, StorageHasher};
 use namada::ledger::storage::write_log::WriteLog;
 use namada::ledger::storage::{DBIter, Storage, DB};
-use namada::ledger::storage_api::{StorageRead, StorageWrite};
 use namada::ledger::{pos, protocol};
 use namada::proto::{self, Tx};
 use namada::types::address::{masp, masp_tx_key, Address};
 use namada::types::chain::ChainId;
 use namada::types::ethereum_events::EthereumEvent;
 use namada::types::key::*;
-use namada::types::storage::{BlockHeight, DbKeySeg, Key, TxIndex};
+use namada::types::storage::{BlockHeight, Key, TxIndex};
 use namada::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
@@ -376,90 +380,6 @@ impl EthereumOracleChannels {
             most_recently_processed_block_receiver,
         }
     }
-}
-
-/// Values in storage that are to do with the local node rather than the
-/// blockchain.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum LocalNodeValue {
-    EthereumOracleLastProcessedBlock,
-}
-
-impl Display for LocalNodeValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            LocalNodeValue::EthereumOracleLastProcessedBlock => {
-                write!(f, "ethereum_oracle_last_processed_block")
-            }
-        }
-    }
-}
-
-impl From<LocalNodeValue> for Key {
-    fn from(value: LocalNodeValue) -> Self {
-        Key::from(DbKeySeg::StringSeg(value.to_string()))
-    }
-}
-
-/// We store some values in storage which are to do with our local node, rather
-/// than any specific chain.
-fn ensure_local_node_values_configured<D, H>(storage: &mut Storage<D, H>)
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-{
-    let local_node_initial_values = HashMap::from([(
-        LocalNodeValue::EthereumOracleLastProcessedBlock,
-        ethereum::BlockHeight::from(0),
-    )]);
-
-    for (key, initial_value) in local_node_initial_values {
-        let key: Key = key.into();
-        let (has_key, _) = storage.has_key(&key).unwrap();
-        if !has_key {
-            tracing::info!(
-                ?key,
-                ?initial_value,
-                "Writing initial value for local node configuration key"
-            );
-            StorageWrite::write(storage, &key, initial_value).unwrap();
-        } else {
-            match StorageRead::read::<ethereum::BlockHeight>(storage, &key)
-                .unwrap()
-            {
-                Some(value) => tracing::info!(
-                    ?key,
-                    ?value,
-                    "Value already present for local node configuration key"
-                ),
-                None => unreachable!(),
-            }
-        }
-    }
-}
-
-fn read_local_node_value<D, H, T: BorshSerialize + BorshDeserialize>(
-    storage: &Storage<D, H>,
-    key: LocalNodeValue,
-) -> T
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-{
-    let key: Key = key.into();
-    StorageRead::read(storage, &key).unwrap().unwrap()
-}
-
-fn write_local_node_value<D, H, T: BorshSerialize + BorshDeserialize>(
-    storage: &mut Storage<D, H>,
-    key: LocalNodeValue,
-    value: T,
-) where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-{
-    let key: Key = key.into();
-    StorageWrite::write(storage, &key, value).unwrap();
 }
 
 impl<D, H> Shell<D, H>

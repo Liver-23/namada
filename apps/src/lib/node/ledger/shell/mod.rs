@@ -56,9 +56,7 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
-use super::ethereum_node::oracle::{
-    self, MostRecentlyProcessedBlockedReceiver,
-};
+use super::ethereum_node::oracle::{self, most_recently_processed_block};
 use crate::config::{genesis, TendermintMode};
 use crate::facade::tendermint_proto::abci::{
     Misbehavior as Evidence, MisbehaviorType as EvidenceType, ValidatorUpdate,
@@ -362,7 +360,7 @@ pub struct EthereumOracleChannels {
     ethereum_receiver: EthereumReceiver,
     control_sender: oracle::control::Sender,
     most_recently_processed_block_receiver:
-        MostRecentlyProcessedBlockedReceiver,
+        most_recently_processed_block::Receiver,
 }
 
 impl EthereumOracleChannels {
@@ -370,7 +368,7 @@ impl EthereumOracleChannels {
         events_receiver: Receiver<EthereumEvent>,
         control_sender: oracle::control::Sender,
         most_recently_processed_block_receiver:
-            MostRecentlyProcessedBlockedReceiver,
+        most_recently_processed_block::Receiver,
     ) -> Self {
         Self {
             ethereum_receiver: EthereumReceiver::new(events_receiver),
@@ -1160,7 +1158,6 @@ mod test_utils {
         RequestInitChain, RequestProcessProposal,
     };
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-    use crate::node::ledger::ethereum_node::oracle::most_recently_processed_block_watch;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
@@ -1304,7 +1301,7 @@ mod test_utils {
             let (eth_sender, eth_receiver) =
                 tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
             let (_, most_recently_processed_block_receiver) =
-                most_recently_processed_block_watch();
+                most_recently_processed_block::channel();
             let (control_sender, control_receiver) = oracle::control::channel();
             let eth_oracle = EthereumOracleChannels::new(
                 eth_receiver,
@@ -1481,7 +1478,7 @@ mod test_utils {
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let (control_sender, _) = oracle::control::channel();
         let (_, most_recently_processed_block_receiver) =
-            most_recently_processed_block_watch();
+            most_recently_processed_block::channel();
         let eth_oracle = EthereumOracleChannels::new(
             eth_receiver,
             control_sender,
@@ -1553,7 +1550,7 @@ mod test_utils {
             tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
         let (control_sender, _) = oracle::control::channel();
         let (_, most_recently_processed_block_receiver) =
-            most_recently_processed_block_watch();
+            most_recently_processed_block::channel();
         let eth_oracle = EthereumOracleChannels::new(
             eth_receiver,
             control_sender,

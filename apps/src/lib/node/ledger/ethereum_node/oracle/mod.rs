@@ -1,5 +1,6 @@
 pub mod config;
 pub mod control;
+pub mod most_recently_processed_block;
 
 use std::ops::Deref;
 use std::time::Duration;
@@ -10,7 +11,6 @@ use namada::eth_bridge::ethereum;
 use namada::types::ethereum_events::EthereumEvent;
 use num256::Uint256;
 use tokio::sync::mpsc::Sender as BoundedSender;
-use tokio::sync::watch;
 use tokio::task::LocalSet;
 #[cfg(not(test))]
 use web30::client::Web3;
@@ -23,18 +23,6 @@ use super::test_tools::mock_web3_client::Web3;
 /// The default amount of time the oracle will wait between processing blocks
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_secs(1);
 
-pub type MostRecentlyProcessedBlockSender =
-    watch::Sender<Option<ethereum::BlockHeight>>;
-pub type MostRecentlyProcessedBlockedReceiver =
-    watch::Receiver<Option<ethereum::BlockHeight>>;
-
-pub fn most_recently_processed_block_watch() -> (
-    MostRecentlyProcessedBlockSender,
-    MostRecentlyProcessedBlockedReceiver,
-) {
-    watch::channel(None)
-}
-
 /// A client that can talk to geth and parse
 /// and relay events relevant to Namada to the
 /// ledger process
@@ -45,7 +33,7 @@ pub struct Oracle {
     /// events to the ledger process
     sender: BoundedSender<EthereumEvent>,
     /// The most recently processed block is recorded here.
-    most_recently_processed_block: MostRecentlyProcessedBlockSender,
+    most_recently_processed_block: most_recently_processed_block::Sender,
     /// How long the oracle should wait between checking blocks
     backoff: Duration,
     /// A channel for controlling and configuring the oracle.
@@ -66,7 +54,7 @@ impl Oracle {
     pub fn new(
         url: &str,
         sender: BoundedSender<EthereumEvent>,
-        most_recently_processed_block: MostRecentlyProcessedBlockSender,
+        most_recently_processed_block: most_recently_processed_block::Sender,
         backoff: Duration,
         control: control::Receiver,
     ) -> Self {
@@ -123,7 +111,7 @@ pub fn run_oracle(
     url: impl AsRef<str>,
     sender: BoundedSender<EthereumEvent>,
     control: control::Receiver,
-    most_recently_processed_block: MostRecentlyProcessedBlockSender,
+    most_recently_processed_block: most_recently_processed_block::Sender,
 ) -> tokio::task::JoinHandle<()> {
     let url = url.as_ref().to_owned();
     // we have to run the oracle in a [`LocalSet`] due to the web30
@@ -427,7 +415,8 @@ mod test_oracle {
     fn setup() -> TestPackage {
         let (admin_channel, blocks_processed_recv, client) = Web3::setup();
         let (eth_sender, eth_receiver) = tokio::sync::mpsc::channel(1000);
-        let (most_recently_processed_block_sender, _) = watch::channel(None);
+        let (most_recently_processed_block_sender, _) =
+            most_recently_processed_block::channel();
         let (control_sender, control_receiver) = control::channel();
         TestPackage {
             oracle: Oracle {

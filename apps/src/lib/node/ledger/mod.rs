@@ -24,7 +24,7 @@ use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
 use self::ethereum_node::eth_fullnode;
-use self::ethereum_node::oracle::most_recently_processed_block_watch;
+use self::ethereum_node::oracle::most_recently_processed_block;
 use self::shell::EthereumOracleChannels;
 use self::shims::abcipp_shim::AbciService;
 use crate::config::utils::num_of_threads;
@@ -644,7 +644,7 @@ async fn maybe_start_ethereum_oracle(
     let (
         most_recently_processed_block_sender,
         most_recently_processed_block_receiver,
-    ) = most_recently_processed_block_watch();
+    ) = most_recently_processed_block::channel();
     let (control_sender, control_receiver) = oracle::control::channel();
 
     match config.ethereum_bridge.mode {

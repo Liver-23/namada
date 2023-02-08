@@ -178,7 +178,7 @@ async fn run_oracle_aux(mut oracle: Oracle) {
             result = process(&oracle, &config, &mut pending, next_block_to_process.clone()) => {
                 match result {
                     Ok(()) => {
-                        oracle.most_recently_processed_block.send(Some(next_block_to_process.clone())).unwrap();
+                        oracle.most_recently_processed_block.send_replace(Some(next_block_to_process.clone()));
                         next_block_to_process += 1.into()
                     },
                     Err(error) => tracing::warn!(

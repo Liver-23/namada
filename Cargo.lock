@@ -4276,6 +4276,7 @@ dependencies = [
  "itertools",
  "namada_core",
  "namada_proof_of_stake",
+ "num256",
  "rand 0.8.5",
  "serde 1.0.147",
  "serde_json",

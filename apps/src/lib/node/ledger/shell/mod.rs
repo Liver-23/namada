@@ -24,6 +24,7 @@ use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada::core::ledger::eth_bridge;
+use namada::eth_bridge::ethereum;
 use namada::ledger::eth_bridge::{EthBridgeQueries, EthereumBridgeConfig};
 use namada::ledger::events::log::EventLog;
 use namada::ledger::events::Event;
@@ -411,7 +412,7 @@ where
 {
     let local_node_initial_values = HashMap::from([(
         LocalNodeValue::EthereumOracleLastProcessedBlock,
-        1u64,
+        ethereum::BlockHeight::from(0),
     )]);
 
     for (key, initial_value) in local_node_initial_values {
@@ -425,12 +426,16 @@ where
             );
             StorageWrite::write(storage, &key, initial_value).unwrap();
         } else {
-            let value: u64 = StorageRead::read(storage, &key).unwrap().unwrap();
-            tracing::info!(
-                ?key,
-                ?value,
-                "Value already present for local node configuration key"
-            );
+            match StorageRead::read::<ethereum::BlockHeight>(storage, &key)
+                .unwrap()
+            {
+                Some(value) => tracing::info!(
+                    ?key,
+                    ?value,
+                    "Value already present for local node configuration key"
+                ),
+                None => unreachable!(),
+            }
         }
     }
 }
@@ -799,11 +804,12 @@ where
             ..
         } = &self.mode
         {
-            match eth_oracle
+            let mrpb = eth_oracle
                 .most_recently_processed_block_receiver
                 .borrow()
-                .as_deref()
-            {
+                .as_ref()
+                .cloned();
+            match mrpb {
                 Some(mrpb) => {
                     tracing::info!(
                         "Ethereum oracle's most recently processed Ethereum \
@@ -813,7 +819,7 @@ where
                     write_local_node_value(
                         &mut self.storage,
                         LocalNodeValue::EthereumOracleLastProcessedBlock,
-                        mrpb.to_u64().unwrap(), // TODO: is u64 appropriate?
+                        mrpb,
                     )
                 }
                 None => tracing::info!(
@@ -898,7 +904,7 @@ where
                 );
                 return;
             };
-            let start_block: u64 = read_local_node_value(
+            let start_block: ethereum::BlockHeight = read_local_node_value(
                 &self.storage,
                 LocalNodeValue::EthereumOracleLastProcessedBlock,
             );

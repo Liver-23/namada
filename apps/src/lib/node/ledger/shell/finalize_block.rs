@@ -824,11 +824,11 @@ where
                 .insert(address, (new_product, new_delegation_product));
 
             dbg!(&reward);
-            if reward < reward_tokens_remaining {
-                reward_tokens_remaining -= reward;
-            } else {
-                reward_tokens_remaining = 0;
-            }
+            // if reward < reward_tokens_remaining {
+            reward_tokens_remaining -= reward;
+            // } else {
+            //     reward_tokens_remaining = 0;
+            // }
         }
 
         println!(

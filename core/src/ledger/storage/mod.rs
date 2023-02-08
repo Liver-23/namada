@@ -562,6 +562,7 @@ where
         hash: BlockHash,
         height: BlockHeight,
     ) -> Result<()> {
+        println!("BEGIN BLOCK {}", height.0);
         self.block.hash = hash;
         self.block.height = height;
         Ok(())

@@ -400,6 +400,17 @@ where
             self.update_epoch(&mut response);
         }
 
+        let rewards_acc: HashMap<Address, Decimal> =
+            rewards_accumulator_handle()
+                .iter(&self.wl_storage)?
+                .map(|a| a.unwrap())
+                .collect();
+        let sum = rewards_acc
+            .clone()
+            .into_iter()
+            .fold(Decimal::ZERO, |sum, elm| sum + elm.1);
+        dbg!(&rewards_acc, sum);
+
         // Read the block proposer of the previously committed block in storage
         // (n-1 if we are in the process of finalizing n right now).
         match read_last_block_proposer_address(&self.wl_storage)? {
@@ -521,7 +532,9 @@ where
         hash: BlockHash,
         byzantine_validators: Vec<Evidence>,
     ) -> (BlockHeight, bool) {
+        dbg!(&self.wl_storage.storage.last_height);
         let height = self.wl_storage.storage.last_height + 1;
+        dbg!(&height);
 
         self.gas_meter.reset();
 
@@ -694,12 +707,26 @@ where
             Amount::from(pos_minted_tokens),
         )?;
 
+        println!(
+            "\nMINTING TOKEN AMOUNT {}",
+            token::Amount::from(pos_minted_tokens)
+        );
+
         // For each consensus validator, update the rewards products
         //
         // TODO: update implementation using lazy DS and be more
         // memory-efficient
 
         // Get the number of blocks in the last epoch
+        dbg!(
+            &self
+                .wl_storage
+                .storage
+                .block
+                .pred_epochs
+                .first_block_heights
+        );
+
         let first_block_of_last_epoch = self
             .wl_storage
             .storage
@@ -725,13 +752,28 @@ where
         let mut new_rewards_products: HashMap<Address, (Decimal, Decimal)> =
             HashMap::new();
 
+        let mut val_sum = Decimal::ZERO;
+        let mut frac_sum = Decimal::ZERO;
+
+        let rewards_acc: HashMap<Address, Decimal> =
+            rewards_accumulator_handle()
+                .iter(&self.wl_storage)?
+                .map(|a| a.unwrap())
+                .collect();
+        dbg!(&rewards_acc);
+
         for acc in rewards_accumulator_handle().iter(&self.wl_storage)? {
             let (address, value) = acc?;
+            println!("\nAccumulator for validator {}", address.clone());
+
+            val_sum += value;
 
             // Get reward token amount for this validator
             let fractional_claim =
                 value / Decimal::from(num_blocks_in_last_epoch);
             let reward = decimal_mult_u64(fractional_claim, pos_minted_tokens);
+
+            frac_sum += dbg!(fractional_claim);
 
             // Get validator data at the last epoch
             let stake = read_validator_stake(
@@ -762,8 +804,22 @@ where
                         / stake);
             new_rewards_products
                 .insert(address, (new_product, new_delegation_product));
-            reward_tokens_remaining -= reward;
+
+            dbg!(&reward);
+            if reward < reward_tokens_remaining {
+                reward_tokens_remaining -= reward;
+            }
         }
+
+        println!(
+            "Current: block {}, epoch {}\nSum of values = {}\nSum of weighted \
+             values = {}",
+            self.wl_storage.storage.block.height,
+            self.wl_storage.storage.block.epoch,
+            val_sum,
+            frac_sum
+        );
+
         for (
             address,
             (new_validator_reward_product, new_delegator_reward_product),
@@ -850,6 +906,7 @@ mod test_finalize_block {
         InitProposalData, VoteProposalData,
     };
     use namada::types::transaction::{EncryptionKey, Fee, WrapperTx, MIN_FEE};
+    use rust_decimal_macros::dec;
 
     use super::*;
     use crate::node::ledger::shell::test_utils::*;
@@ -1303,7 +1360,7 @@ mod test_finalize_block {
     fn test_inflation_accounting() {
         // GENERAL IDEA OF THE TEST:
         // For the duration of an epoch, choose some number of times for each of
-        // 3 genesis validators to propose a block and choose some arbitrary
+        // 4 genesis validators to propose a block and choose some arbitrary
         // voting distribution for each block. After each call of
         // finalize_block, check the validator rewards accumulators to ensure
         // that the proper inflation is being applied for each validator. Can
@@ -1311,7 +1368,7 @@ mod test_finalize_block {
         // properly. At the end of the epoch, check that the validator rewards
         // products are appropriately updated.
 
-        let (mut shell, _) = setup(3);
+        let (mut shell, _) = setup(4);
 
         let mut validator_set: BTreeSet<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
@@ -1327,6 +1384,7 @@ mod test_finalize_block {
         let val1 = validator_set.pop_first_shim().unwrap();
         let val2 = validator_set.pop_first_shim().unwrap();
         let val3 = validator_set.pop_first_shim().unwrap();
+        let val4 = validator_set.pop_first_shim().unwrap();
 
         let get_pkh = |address, epoch| {
             let ck = validator_consensus_key_handle(&address)
@@ -1337,13 +1395,119 @@ mod test_finalize_block {
             HEXUPPER.decode(hash_string.as_bytes()).unwrap()
         };
 
-        // TODO: figure out how to get the Tendermint public key hash bytes from
-        // a Namada address!! Possible this won't work with my randomly chosen
-        // validator address and consensus key
         let pkh1 = get_pkh(val1.address.clone(), Epoch::default());
         let pkh2 = get_pkh(val2.address.clone(), Epoch::default());
         let pkh3 = get_pkh(val3.address.clone(), Epoch::default());
+        let pkh4 = get_pkh(val4.address.clone(), Epoch::default());
 
+        // All validators sign blocks initially
+        let votes = vec![
+            VoteInfo {
+                validator_address: pkh1.clone(),
+                validator_vp: u64::from(val1.bonded_stake),
+                signed_last_block: true,
+            },
+            VoteInfo {
+                validator_address: pkh2.clone(),
+                validator_vp: u64::from(val2.bonded_stake),
+                signed_last_block: true,
+            },
+            VoteInfo {
+                validator_address: pkh3.clone(),
+                validator_vp: u64::from(val3.bonded_stake),
+                signed_last_block: true,
+            },
+            VoteInfo {
+                validator_address: pkh4.clone(),
+                validator_vp: u64::from(val4.bonded_stake),
+                signed_last_block: true,
+            },
+        ];
+
+        let rewards_prod_1 = validator_rewards_products_handle(&val1.address);
+        let rewards_prod_2 = validator_rewards_products_handle(&val2.address);
+        let rewards_prod_3 = validator_rewards_products_handle(&val3.address);
+        let rewards_prod_4 = validator_rewards_products_handle(&val4.address);
+
+        let is_decimal_equal_enough =
+            |target: Decimal, to_compare: Decimal| -> bool {
+                // also return false if to_compare > target since this should
+                // never happen for the use cases
+                if to_compare < target {
+                    let tolerance = Decimal::new(1, 9);
+                    let res = Decimal::ONE - to_compare / target;
+                    res < tolerance
+                } else {
+                    to_compare == target
+                }
+            };
+
+        // NOTE: Want to manually set the block proposer and the vote
+        // information in a FinalizeBlock object. In non-abcipp mode,
+        // the block proposer is written in ProcessProposal, so need to
+        // manually do it here let proposer_address = pkh1.clone();
+
+        // FINALIZE BLOCK 1. Tell Namada that val1 is the block proposer. We
+        // won't receive votes from TM since we receive votes at a 1-block
+        // delay, so votes will be empty here
+        dbg!(shell.wl_storage.storage.block.height.0);
+        next_block_for_inflation(&mut shell, &val1.address, vec![]);
+        dbg!(shell.wl_storage.storage.block.height.0);
+        assert!(
+            rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
+
+        // FINALIZE BLOCK 2. Tell Namada that val1 is the block proposer.
+        // Include votes that correspond to block 1. Make val2 the next block's
+        // proposer.
+        next_block_for_inflation(&mut shell, &val2.address, votes.clone());
+        dbg!(shell.wl_storage.storage.block.height.0);
+
+        assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
+        assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
+        assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
+        assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
+        assert!(
+            !rewards_accumulator_handle()
+                .is_empty(&shell.wl_storage)
+                .unwrap()
+        );
+        // Val1 was the proposer, so its reward should be larger than all
+        // others, which should themselves all be equal
+        let acc_sum = get_rewards_sum(&shell.wl_storage);
+        assert!(is_decimal_equal_enough(Decimal::ONE, acc_sum));
+        let acc = get_rewards_acc(&shell.wl_storage);
+        assert_eq!(acc.get(&val2.address), acc.get(&val3.address));
+        assert_eq!(acc.get(&val2.address), acc.get(&val4.address));
+        assert!(
+            acc.get(&val1.address).cloned().unwrap()
+                > acc.get(&val2.address).cloned().unwrap()
+        );
+
+        // FINALIZE BLOCK 3, with val1 as proposer for the next block.
+        next_block_for_inflation(&mut shell, &val1.address, votes.clone());
+        dbg!(shell.wl_storage.storage.block.height.0);
+
+        assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
+        assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
+        assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
+        assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
+        // Val2 was the proposer for this block, so its rewards accumulator
+        // should be the same as val1 now. Val3 and val4 should be equal as
+        // well.
+        let acc_sum = get_rewards_sum(&shell.wl_storage);
+        assert!(is_decimal_equal_enough(Decimal::TWO, acc_sum));
+        let acc = get_rewards_acc(&shell.wl_storage);
+        assert_eq!(acc.get(&val1.address), acc.get(&val2.address));
+        assert_eq!(acc.get(&val3.address), acc.get(&val4.address));
+        assert!(
+            acc.get(&val1.address).cloned().unwrap()
+                > acc.get(&val3.address).cloned().unwrap()
+        );
+
+        // Now we don't receive a vote from val4.
         let votes = vec![
             VoteInfo {
                 validator_address: pkh1,
@@ -1360,115 +1524,82 @@ mod test_finalize_block {
                 validator_vp: u64::from(val3.bonded_stake),
                 signed_last_block: true,
             },
+            VoteInfo {
+                validator_address: pkh4,
+                validator_vp: u64::from(val4.bonded_stake),
+                signed_last_block: false,
+            },
         ];
 
-        // Want to manually set the block proposer and the vote information in a
-        // FinalizeBlock object. In non-abcipp mode, the block proposer is
-        // written in ProcessProposal, so need to manually do it here
-        // let proposer_address = pkh1.clone();
-
-        next_block_for_inflation(&mut shell, &val1.address, vec![]);
-
-        let rewards_acc = rewards_accumulator_handle()
-            .iter(&shell.wl_storage)
-            .unwrap()
-            .map(|elem| elem.unwrap())
-            .collect::<HashMap<Address, Decimal>>();
-
-        let rewards_prod_1 = validator_rewards_products_handle(&val1.address)
-            .iter(&shell.wl_storage)
-            .unwrap()
-            .map(|elem| elem.unwrap())
-            .collect::<HashMap<Epoch, Decimal>>();
-
-        dbg!(&rewards_acc, &rewards_prod_1);
-
-        // let reward_acc =
-        //     shell.storage.read_consensus_validator_rewards_accumulator();
-        // let reward_prd =
-        //     shell.storage.read_validator_rewards_products(&val1.address);
-
-        // dbg!(&reward_acc, &reward_prd);
-
+        // FINALIZE BLOCK 4. The next block proposer will be val1. Only val1,
+        // val2, and val3 vote on this block.
         next_block_for_inflation(&mut shell, &val1.address, votes.clone());
+        dbg!(shell.wl_storage.storage.block.height.0);
 
-        let rewards_acc = rewards_accumulator_handle()
-            .iter(&shell.wl_storage)
+        assert!(rewards_prod_1.is_empty(&shell.wl_storage).unwrap());
+        assert!(rewards_prod_2.is_empty(&shell.wl_storage).unwrap());
+        assert!(rewards_prod_3.is_empty(&shell.wl_storage).unwrap());
+        assert!(rewards_prod_4.is_empty(&shell.wl_storage).unwrap());
+        let acc_sum = get_rewards_sum(&shell.wl_storage);
+        assert!(is_decimal_equal_enough(dec!(3), acc_sum));
+        let acc = get_rewards_acc(&shell.wl_storage);
+        assert!(
+            acc.get(&val1.address).cloned().unwrap()
+                > acc.get(&val2.address).cloned().unwrap()
+        );
+        assert!(
+            acc.get(&val2.address).cloned().unwrap()
+                > acc.get(&val3.address).cloned().unwrap()
+        );
+        assert!(
+            acc.get(&val3.address).cloned().unwrap()
+                > acc.get(&val4.address).cloned().unwrap()
+        );
+
+        // Advance to the start of epoch 1. Val1 is the only block proposer for
+        // the rest of the epoch. Val4 does not vote for the rest of the epoch.
+        let height_of_next_epoch =
+            shell.wl_storage.storage.next_epoch_min_start_height;
+        let current_height = 4_u64;
+        assert_eq!(current_height, shell.wl_storage.storage.block.height.0);
+        for _ in current_height..height_of_next_epoch.0 {
+            next_block_for_inflation(&mut shell, &val1.address, votes.clone());
+            dbg!(shell.wl_storage.storage.block.height.0);
+        }
+
+        dbg!(
+            get_rewards_acc(&shell.wl_storage),
+            get_rewards_sum(&shell.wl_storage),
+            rewards_prod_1.is_empty(&shell.wl_storage).unwrap(),
+            rewards_prod_2.is_empty(&shell.wl_storage).unwrap(),
+            rewards_prod_3.is_empty(&shell.wl_storage).unwrap(),
+            rewards_prod_4.is_empty(&shell.wl_storage).unwrap(),
+            shell.wl_storage.storage.block.height,
+            shell.wl_storage.storage.block.epoch,
+        );
+    }
+
+    fn get_rewards_acc<S>(storage: &S) -> HashMap<Address, Decimal>
+    where
+        S: StorageRead,
+    {
+        rewards_accumulator_handle()
+            .iter(storage)
             .unwrap()
             .map(|elem| elem.unwrap())
-            .collect::<HashMap<Address, Decimal>>();
+            .collect::<HashMap<Address, Decimal>>()
+    }
 
-        let rewards_prod_1 = validator_rewards_products_handle(&val1.address)
-            .iter(&shell.wl_storage)
-            .unwrap()
-            .map(|elem| elem.unwrap())
-            .collect::<HashMap<Epoch, Decimal>>();
-
-        dbg!(&rewards_acc, &rewards_prod_1);
-        let sum = rewards_acc
-            .iter()
-            .fold(Decimal::default(), |sum, elm| sum + *elm.1);
-        dbg!(&sum);
-
-        next_block_for_inflation(&mut shell, &val1.address, votes.clone());
-
-        let rewards_acc = rewards_accumulator_handle()
-            .iter(&shell.wl_storage)
-            .unwrap()
-            .map(|elem| elem.unwrap())
-            .collect::<HashMap<Address, Decimal>>();
-
-        let rewards_prod_1 = validator_rewards_products_handle(&val1.address)
-            .iter(&shell.wl_storage)
-            .unwrap()
-            .map(|elem| elem.unwrap())
-            .collect::<HashMap<Epoch, Decimal>>();
-
-        dbg!(&rewards_acc, &rewards_prod_1);
-        let sum = rewards_acc
-            .iter()
-            .fold(Decimal::default(), |sum, elm| sum + *elm.1);
-        dbg!(&sum);
-
-        next_block_for_inflation(&mut shell, &val2.address, votes.clone());
-
-        let rewards_acc = rewards_accumulator_handle()
-            .iter(&shell.wl_storage)
-            .unwrap()
-            .map(|elem| elem.unwrap())
-            .collect::<HashMap<Address, Decimal>>();
-
-        let rewards_prod_1 = validator_rewards_products_handle(&val1.address)
-            .iter(&shell.wl_storage)
-            .unwrap()
-            .map(|elem| elem.unwrap())
-            .collect::<HashMap<Epoch, Decimal>>();
-
-        dbg!(&rewards_acc, &rewards_prod_1);
-        let sum = rewards_acc
-            .iter()
-            .fold(Decimal::default(), |sum, elm| sum + *elm.1);
-        dbg!(&sum);
-
-        next_block_for_inflation(&mut shell, &val2.address, votes);
-
-        let rewards_acc = rewards_accumulator_handle()
-            .iter(&shell.wl_storage)
-            .unwrap()
-            .map(|elem| elem.unwrap())
-            .collect::<HashMap<Address, Decimal>>();
-
-        let rewards_prod_1 = validator_rewards_products_handle(&val1.address)
-            .iter(&shell.wl_storage)
-            .unwrap()
-            .map(|elem| elem.unwrap())
-            .collect::<HashMap<Epoch, Decimal>>();
-
-        dbg!(&rewards_acc, &rewards_prod_1);
-        let sum = rewards_acc
-            .iter()
-            .fold(Decimal::default(), |sum, elm| sum + *elm.1);
-        dbg!(&sum);
+    fn get_rewards_sum<S>(storage: &S) -> Decimal
+    where
+        S: StorageRead,
+    {
+        let acc = get_rewards_acc(storage);
+        if acc.is_empty() {
+            Decimal::ZERO
+        } else {
+            acc.iter().fold(Decimal::default(), |sum, elm| sum + *elm.1)
+        }
     }
 
     fn next_block_for_inflation(

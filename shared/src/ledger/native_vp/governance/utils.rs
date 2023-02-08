@@ -39,6 +39,9 @@ pub enum Error {
     /// Invalid proposal field deserialization
     #[error("Invalid proposal {0}")]
     InvalidProposal(u64),
+    /// Error during tally
+    #[error("Error while tallying proposal: {0}")]
+    Tally(String),
 }
 
 /// Proposal event definition
@@ -82,7 +85,7 @@ pub fn compute_tally(
     votes: Votes,
     total_stake: VotePower,
     proposal_type: &ProposalType,
-) -> ProposalResult {
+) -> Result<ProposalResult, Error> {
     let Votes {
         yay_validators,
         delegators,
@@ -160,25 +163,27 @@ pub fn compute_tally(
                     ProposalType::ETHBridge => {
                         TallyResult::Passed(Tally::ETHBridge)
                     }
-                    _ => TallyResult::Failed(format!(
-                        "Unexpected proposal type {}",
-                        proposal_type
-                    )),
+                    _ => {
+                        return Err(Error::Tally(format!(
+                            "Unexpected proposal type: {}",
+                            proposal_type
+                        )))
+                    }
                 };
 
-                ProposalResult {
+                Ok(ProposalResult {
                     result: tally_result,
                     total_voting_power: total_stake,
                     total_yay_power: total_yay_staked_tokens,
                     total_nay_power: 0,
-                }
+                })
             } else {
-                ProposalResult {
+                Ok(ProposalResult {
                     result: TallyResult::Rejected,
                     total_voting_power: total_stake,
                     total_yay_power: total_yay_staked_tokens,
                     total_nay_power: 0,
-                }
+                })
             }
         }
         ProposalType::PGFCouncil => {
@@ -232,11 +237,7 @@ pub fn compute_tally(
                                                 {
                                                     *power -= vote_power;
                                                 } else {
-                                                    return ProposalResult {
-                                                    result: TallyResult::Failed(format!("Expected PGF vote {:?} was not in tally", vote)),
-                                                    total_voting_power: total_stake,
-                                                    total_yay_power: 0,
-                                                    total_nay_power: 0};
+                                                    return Err(Error::Tally(format!("Expected PGF vote {:?} was not in tally", vote)));
                                                 }
                                             } else {
                                                 // Validator didn't vote for
@@ -287,20 +288,14 @@ pub fn compute_tally(
                                             {
                                                 *power -= vote_power;
                                             } else {
-                                                return ProposalResult {
-                                                    result: TallyResult::Failed(
-                                                        format!(
-                                                            "Expected PGF \
+                                                return Err(Error::Tally(
+                                                    format!(
+                                                        "Expected PGF \
                                                              vote {:?} was \
                                                              not in tally",
-                                                            vote
-                                                        ),
+                                                        vote
                                                     ),
-                                                    total_voting_power:
-                                                        total_stake,
-                                                    total_yay_power: 0,
-                                                    total_nay_power: 0,
-                                                };
+                                                ));
                                             }
                                         }
                                     } else {
@@ -332,12 +327,12 @@ pub fn compute_tally(
                 .fold(0, |acc, (_, vote_power)| acc + vote_power);
 
             match total_yay_voted_power.checked_mul(3) {
-                Some(v) if v < total_stake => ProposalResult {
+                Some(v) if v < total_stake => Ok(ProposalResult {
                     result: TallyResult::Rejected,
                     total_voting_power: total_stake,
                     total_yay_power: total_yay_voted_power,
                     total_nay_power: 0,
-                },
+                }),
                 _ => {
                     // Select the winner council based on approval voting
                     // (majority)
@@ -347,12 +342,12 @@ pub fn compute_tally(
                         .map(|(vote, _)| vote.to_owned())
                         .unwrap(); // Cannot be None at this point
 
-                    ProposalResult {
+                    Ok(ProposalResult {
                         result: TallyResult::Passed(Tally::PGFCouncil(council)),
                         total_voting_power: total_stake,
                         total_yay_power: total_yay_voted_power,
                         total_nay_power: 0,
-                    }
+                    })
                 }
             }
         }
